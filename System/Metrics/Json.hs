@@ -1,9 +1,10 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
--- | Encoding of ekg metrics as JSON. The encoding defined by the
--- functions in this module are standardized and used by the ekg web
--- UI. The purpose of this module is to let other web servers and
--- frameworks than the one used by the ekg package expose ekg metrics.
+-- | This module defines an encoding of ekg metrics as JSON. This
+-- encoding is used by the ekg web UI. This encoding is also
+-- standardized so that other web servers and frameworks can also expose
+-- ekg metrics.
 module System.Metrics.Json
     ( -- * Converting metrics to JSON values
       sampleToJson
@@ -18,7 +19,9 @@ import Data.Aeson ((.=))
 import qualified Data.Aeson.Types as A
 import qualified Data.HashMap.Strict as M
 import Data.Int (Int64)
+import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
+import qualified Data.Vector as V
 import qualified System.Metrics as Metrics
 import qualified System.Metrics.Distribution as Distribution
 
@@ -26,40 +29,89 @@ import qualified System.Metrics.Distribution as Distribution
 -- * Converting metrics to JSON values
 
 
--- | Encode metrics as nested JSON objects. Each "." in the metric
--- name introduces a new level of nesting. For example, the metrics
--- @[("foo.bar", 10), ("foo.baz", "label")]@ are encoded as
+-- | Encode metrics as nested JSON objects. Each "." in the metric name
+-- introduces a new level of nesting.
+--
+-- For example, the metric set
+--
+-- > ("foo.bar", {}, "label")
+-- > ("foo.baz", {"tag","a"}, 10)
+-- > ("foo.baz", {"tag","b"}, 11)
+--
+-- is encoded as
 --
 -- > {
 -- >   "foo": {
--- >     "bar": {
--- >       "type:", "c",
--- >       "val": 10
--- >     },
--- >     "baz": {
--- >       "type": "l",
--- >       "val": "label"
--- >     }
+-- >     "bar": [
+-- >       { "tags": {},
+-- >         "value": {
+-- >           "type": "l",
+-- >           "val": "label"
+-- >         }
+-- >       }
+-- >     ],
+-- >     "baz": [
+-- >       { "tags": {
+-- >           "tag": "a"
+-- >         },
+-- >         "value": {
+-- >           "type": "c",
+-- >           "val": 10
+-- >         }
+-- >       },
+-- >       { "tags": {
+-- >           "tag": "b"
+-- >         },
+-- >         "value": {
+-- >           "type": "c",
+-- >           "val": 11
+-- >         }
+-- >       }
+-- >     ]
 -- >   }
 -- > }
 --
 sampleToJson :: Metrics.Sample -> A.Value
 sampleToJson metrics =
-    buildOne metrics $ A.emptyObject
+    M.foldlWithKey' build A.emptyObject (groupMetrics metrics)
   where
-    buildOne :: M.HashMap T.Text Metrics.Value -> A.Value -> A.Value
-    buildOne m o = M.foldlWithKey' build o m
+    -- Group a set of metrics by metric name.
+    groupMetrics
+      :: M.HashMap Metrics.Identifier Metrics.Value
+      -> M.HashMap T.Text [(M.HashMap T.Text T.Text, Metrics.Value)]
+    groupMetrics = M.foldlWithKey' f M.empty
+      where
+        f m (Metrics.Identifier name tags) value =
+            let !x = (tags, value)
+            -- Info: If inserting at an existing key,
+            -- `Data.HashMap.Strict.insertWith f key value` calls
+            -- `f value existingValue`.
+            in  M.insertWith (++) name [x] m
 
-    build :: A.Value -> T.Text -> Metrics.Value -> A.Value
-    build m name val = go m (T.splitOn "." name) val
+    build
+      :: A.Value
+      -> T.Text
+      -> [(M.HashMap T.Text T.Text, Metrics.Value)]
+      -> A.Value
+    build json name values = go json (T.splitOn "." name)
+      where
+        valuesArray :: A.Value
+        valuesArray = A.Array $ V.fromList $ map taggedValueToJson values
 
-    go :: A.Value -> [T.Text] -> Metrics.Value -> A.Value
-    go (A.Object m) [str] val      = A.Object $ M.insert str metric m
-      where metric = valueToJson val
-    go (A.Object m) (str:rest) val = case M.lookup str m of
-        Nothing -> A.Object $ M.insert str (go A.emptyObject rest val) m
-        Just m' -> A.Object $ M.insert str (go m' rest val) m
-    go v _ _                        = typeMismatch "Object" v
+        taggedValueToJson
+          :: (M.HashMap T.Text T.Text, Metrics.Value) -> A.Value
+        taggedValueToJson (tags, value) = A.object
+            [ "tags" .= tags
+            , "value" .= valueToJson value
+            ]
+
+        go :: A.Value -> [T.Text] -> A.Value
+        go (A.Object m) (str:rest) = A.Object $ M.insert str goRest m
+          where
+            goRest = case rest of
+                [] -> valuesArray
+                (_:_) -> go (fromMaybe A.emptyObject $ M.lookup str m) rest
+        go v _ = typeMismatch "Object" v
 
 typeMismatch :: String   -- ^ The expected type
              -> A.Value  -- ^ The actual value encountered
