@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | This module defines an encoding of ekg metrics as JSON. This
@@ -16,6 +17,10 @@ module System.Metrics.Json
     ) where
 
 import Data.Aeson ((.=))
+#if MIN_VERSION_aeson(2,0,0)
+import qualified Data.Aeson.Key as K
+import qualified Data.Aeson.KeyMap as KM
+#endif
 import qualified Data.Aeson.Types as A
 import qualified Data.HashMap.Strict as M
 import Data.Int (Int64)
@@ -106,11 +111,20 @@ sampleToJson metrics =
             ]
 
         go :: A.Value -> [T.Text] -> A.Value
-        go (A.Object m) (str:rest) = A.Object $ M.insert str goRest m
+        go (A.Object m) (str:rest) = A.Object $ insert key goRest m
           where
             goRest = case rest of
                 [] -> valuesArray
-                (_:_) -> go (fromMaybe A.emptyObject $ M.lookup str m) rest
+                (_:_) -> go (fromMaybe A.emptyObject $ lookup_ key m) rest
+#if MIN_VERSION_aeson(2,0,0)
+            key = K.fromText str
+            insert = KM.insert
+            lookup_ = KM.lookup
+#else
+            key = str
+            insert = M.insert
+            lookup_ = M.lookup
+#endif
         go v _ = typeMismatch "Object" v
 
 typeMismatch :: String   -- ^ The expected type
