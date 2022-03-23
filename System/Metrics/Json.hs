@@ -176,12 +176,15 @@ typeMismatch expected actual =
         A.Bool _   -> "Boolean"
         A.Null     -> "Null"
 
--- | Encodes a single metric as a JSON object. Example:
+-- | Encodes a single metric as a JSON object. For example:
 --
--- > {
--- >   "type": "c",
--- >   "val": 89460
--- > }
+-- >>> valueToJson (Counter 89460)
+-- Object (fromList [("type",String "c"),("val",Number 89460.0)])
+-- -- { "type": "c", "val": 89460 }
+--
+-- (To prevent any possible confusion, the input is of type
+-- 'System.Metrics.Value' from "System.Metrics", and the output is of
+-- type 'Data.Aeson.Value' from "Data.Aeson".)
 --
 valueToJson :: Metrics.Value -> A.Value
 valueToJson (Metrics.Counter n)      = scalarToJson n CounterType
