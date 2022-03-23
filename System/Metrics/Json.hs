@@ -37,43 +37,77 @@ import qualified System.Metrics.Distribution as Distribution
 -- | Encode metrics as nested JSON objects. Each "." in the metric name
 -- introduces a new level of nesting.
 --
--- For example, the metric set
+-- For example, a set of metrics consisting of
 --
--- > ("foo.bar", {}, "label")
--- > ("foo.baz", {"tag","a"}, 10)
--- > ("foo.baz", {"tag","b"}, 11)
+-- (1) a metric named @foo.counter@, with tags @{key1:"val1"}@, of type
+-- @Counter@, and with value @10@;
+-- (2) a metric named @foo.counter@, with tags @{key1:"val2"}@, of type
+-- @Counter@, and with value @11@;
+-- (3) a metric named @foo.distribution@, with no tags, of type
+-- @Distribution@, and with value
+-- @Distribution{count=1, max=1, mean=1, min=1, sum=1, variance=0}@;
+-- (4) a metric named @gauge@, with no tags, of type @Gauge@, and with
+-- value @100@; and
+-- (5) a metric named @label@, with no tags, of type @Label@, and with
+-- value @"bar"@
 --
 -- is encoded as
 --
 -- > {
 -- >   "foo": {
--- >     "bar": [
--- >       { "tags": {},
--- >         "value": {
--- >           "type": "l",
--- >           "val": "label"
--- >         }
--- >       }
--- >     ],
--- >     "baz": [
--- >       { "tags": {
--- >           "tag": "a"
--- >         },
--- >         "value": {
--- >           "type": "c",
--- >           "val": 10
--- >         }
--- >       },
--- >       { "tags": {
--- >           "tag": "b"
+-- >     "counter": [
+-- >       {
+-- >         "tags": {
+-- >           "key1": "val2"
 -- >         },
 -- >         "value": {
 -- >           "type": "c",
 -- >           "val": 11
 -- >         }
+-- >       },
+-- >       {
+-- >         "tags": {
+-- >           "key1": "val1"
+-- >         },
+-- >         "value": {
+-- >           "type": "c",
+-- >           "val": 10
+-- >         }
+-- >       }
+-- >     ],
+-- >     "distribution": [
+-- >       {
+-- >         "tags": {},
+-- >         "value": {
+-- >           "count": 1,
+-- >           "max": 1,
+-- >           "mean": 1,
+-- >           "min": 1,
+-- >           "sum": 1,
+-- >           "type": "d",
+-- >           "variance": 0
+-- >         }
 -- >       }
 -- >     ]
--- >   }
+-- >   },
+-- >   "gauge": [
+-- >     {
+-- >       "tags": {},
+-- >       "value": {
+-- >         "type": "g",
+-- >         "val": 100
+-- >       }
+-- >     }
+-- >   ],
+-- >   "label": [
+-- >     {
+-- >       "tags": {},
+-- >       "value": {
+-- >         "type": "l",
+-- >         "val": "bar"
+-- >       }
+-- >     }
+-- >   ]
 -- > }
 --
 sampleToJson :: Metrics.Sample -> A.Value

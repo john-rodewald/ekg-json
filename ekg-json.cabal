@@ -38,6 +38,22 @@ library
     -Wredundant-constraints
   default-language: Haskell2010
 
+test-suite tests
+  type:
+    exitcode-stdio-1.0
+  hs-source-dirs:
+    test
+  main-is:
+    Main.hs
+  build-depends:
+    aeson,
+    base,
+    ekg-core,
+    ekg-json,
+    hspec,
+    text,
+    unordered-containers
+
 source-repository head
   type:     git
   location: https://github.com/tibbe/ekg-json.git
